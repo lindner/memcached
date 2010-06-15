@@ -1,7 +1,7 @@
 #ifndef TRACE_H
 #define TRACE_H
 
-#ifdef ENABLE_DTRACE
+#ifdef HAVE_DTRACE
 #include "memcached_dtrace.h"
 #else
 #define MEMCACHED_ASSOC_DELETE(arg0, arg1, arg2)

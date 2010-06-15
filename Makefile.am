@@ -1,6 +1,7 @@
 # Please list files alphabetically in the lists to reduce the risk for
 # a merge conflict.
 #
+ACLOCAL_AMFLAGS = -I m4 --force
 bin_PROGRAMS = engine_testapp memcached
 noinst_PROGRAMS = sizes testapp timedrun
 pkginclude_HEADERS = \
@@ -76,7 +77,7 @@ memcached_SOURCES = \
 memcached_LDFLAGS =-R '$(libdir)'
 memcached_CFLAGS = @PROFILER_FLAGS@
 memcached_DEPENDENCIES = libmcd_util.la
-memcached_LDADD = @PROFILER_LDFLAGS@ libmcd_util.la
+memcached_LDADD = @PROFILER_LDFLAGS@ libmcd_util.la $(LIBEVENT)
 
 if BUILD_CACHE
 memcached_SOURCES += cache.c
@@ -102,12 +103,12 @@ endif
 CLEANFILES=
 BUILT_SOURCES=
 
-if BUILD_DTRACE
+if HAVE_DTRACE
 BUILT_SOURCES += memcached_dtrace.h
 CLEANFILES += memcached_dtrace.h
 endif
 
-if DTRACE_INSTRUMENT_OBJ
+if DTRACE_NEEDS_OBJECTS
 memcached_LDADD += memcached_dtrace.o
 memcached_DEPENDENCIES += memcached_dtrace.o
 CLEANFILES += memcached_dtrace.o

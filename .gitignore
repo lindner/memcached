@@ -21,6 +21,7 @@
 /config.sub
 /config/Doxyfile
 /config/Doxyfile-api
+/config/ltmain.sh
 /configure
 /depcomp
 /doc/doxy
@@ -33,6 +34,10 @@
 /libtool
 /ltmain.sh
 /m4/version.m4
+/m4/libtool.m4
+/m4/ltoptions.m4
+/m4/ltsugar.m4
+/m4/ltversion.m4
 /memcached
 /memcached-*.tar.gz
 /memcached-debug
