@@ -27,12 +27,18 @@ static EXTENSION_ASCII_PROTOCOL_DESCRIPTOR scrub_descriptor = {
 GET_SERVER_API server_api;
 
 static const char *get_name(const void *cmd_cookie) {
+    (void)cmd_cookie;
     return "scrub";
 }
 
 static bool accept_command(const void *cmd_cookie, void *cookie,
                            int argc, token_t *argv, size_t *ndata,
                            char **ptr) {
+    (void)cmd_cookie;
+    (void)cookie;
+    (void)argc;
+    (void)ndata;
+    (void)ptr;
     return strcmp(argv[0].value, "scrub") == 0;
 }
 
@@ -42,6 +48,17 @@ static bool my_response_handler(const void *key, uint16_t keylen,
                                 uint8_t datatype, uint16_t status,
                                 uint64_t cas, const void *cookie)
 {
+    (void)key;
+    (void)keylen;
+    (void)ext;
+    (void)extlen;
+    (void)body;
+    (void)bodylen;
+    (void)datatype;
+    (void)status;
+    (void)cas;
+    (void)cookie;
+
     uint16_t *rval = (uint16_t*)cookie;
     *rval = status;
     return true;
@@ -53,9 +70,14 @@ static bool execute_command(const void *cmd_cookie, const void *cookie,
                                                      int nbytes,
                                                      const char *dta)) {
 
+    (void)cmd_cookie;
+    (void)argc;
+    (void)argv;
     protocol_binary_request_header request = {
-        .request.magic = (uint8_t)PROTOCOL_BINARY_REQ,
-        .request.opcode = PROTOCOL_BINARY_CMD_SCRUB
+        .request = {
+            .magic = (uint8_t)PROTOCOL_BINARY_REQ,
+            .opcode = PROTOCOL_BINARY_CMD_SCRUB
+        }
     };
 
     uint16_t status = 0;
@@ -78,12 +100,15 @@ static bool execute_command(const void *cmd_cookie, const void *cookie,
 
 static void abort_command(const void *cmd_cookie, const void *cookie)
 {
+    (void)cmd_cookie;
+    (void)cookie;
     /* EMPTY */
 }
 
 MEMCACHED_PUBLIC_API
 EXTENSION_ERROR_CODE memcached_extensions_initialize(const char *config,
                                                      GET_SERVER_API get_server_api) {
+    (void)config;
     server_api = get_server_api;
     SERVER_HANDLE_V1 *server = get_server_api();
     if (server == NULL) {

@@ -118,7 +118,7 @@ void log_engine_details(ENGINE_HANDLE * engine,
                 return;
             }
             offset += nw;
-            for (int ii = 0; ii < info->num_features; ++ii) {
+            for (int ii = 0; ii < (int)info->num_features; ++ii) {
                 if (info->features[ii].description != NULL) {
                     nw = snprintf(message + offset, sizeof(message) - offset,
                                   "%s%s", comma ? ", " : "",

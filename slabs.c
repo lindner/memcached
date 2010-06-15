@@ -194,7 +194,7 @@ static void *do_slabs_alloc(struct default_engine *engine, const size_t size, un
     slabclass_t *p;
     void *ret = NULL;
 
-    if (id < POWER_SMALLEST || id > engine->slabs.power_largest) {
+    if (id < POWER_SMALLEST || id > (unsigned int)engine->slabs.power_largest) {
         MEMCACHED_SLABS_ALLOCATE_FAILED(size, 0);
         return NULL;
     }
@@ -245,7 +245,7 @@ static void *do_slabs_alloc(struct default_engine *engine, const size_t size, un
 static void do_slabs_free(struct default_engine *engine, void *ptr, const size_t size, unsigned int id) {
     slabclass_t *p;
 
-    if (id < POWER_SMALLEST || id > engine->slabs.power_largest)
+    if (id < POWER_SMALLEST || id > (unsigned int)engine->slabs.power_largest)
         return;
 
     MEMCACHED_SLABS_FREE(size, id, ptr);

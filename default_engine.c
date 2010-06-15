@@ -139,7 +139,9 @@ ENGINE_ERROR_CODE create_instance(uint64_t interface,
            .description = "Default engine v0.1",
            .num_features = 1,
            .features = {
-               [0].feature = ENGINE_FEATURE_LRU
+               [0] = {
+                   .feature = ENGINE_FEATURE_LRU
+               }
            }
        }
    };
@@ -154,8 +156,8 @@ static inline struct default_engine* get_handle(ENGINE_HANDLE* handle) {
    return (struct default_engine*)handle;
 }
 
-static inline hash_item* get_real_item(item* item) {
-    return (hash_item*)item;
+static inline hash_item* get_real_item(item* it) {
+    return (hash_item*)it;
 }
 
 static const engine_info* default_get_info(ENGINE_HANDLE* handle) {
@@ -204,7 +206,7 @@ static void default_destroy(ENGINE_HANDLE* handle) {
 
 static ENGINE_ERROR_CODE default_item_allocate(ENGINE_HANDLE* handle,
                                                const void* cookie,
-                                               item **item,
+                                               item **itm,
                                                const void* key,
                                                const size_t nkey,
                                                const size_t nbytes,
@@ -224,7 +226,7 @@ static ENGINE_ERROR_CODE default_item_allocate(ENGINE_HANDLE* handle,
    it = item_alloc(engine, key, nkey, flags, exptime, nbytes, cookie);
 
    if (it != NULL) {
-      *item = it;
+      *itm = it;
       return ENGINE_SUCCESS;
    } else {
       return ENGINE_ENOMEM;
@@ -238,6 +240,7 @@ static ENGINE_ERROR_CODE default_item_delete(ENGINE_HANDLE* handle,
                                              uint64_t cas,
                                              uint16_t vbucket)
 {
+   (void)cookie;
    if (vbucket != 0) {
       return ENGINE_ENOTSUP;
    }
@@ -259,21 +262,23 @@ static ENGINE_ERROR_CODE default_item_delete(ENGINE_HANDLE* handle,
 
 static void default_item_release(ENGINE_HANDLE* handle,
                                  const void *cookie,
-                                 item* item) {
-   item_release(get_handle(handle), get_real_item(item));
+                                 item* it) {
+   (void)cookie;
+   item_release(get_handle(handle), get_real_item(it));
 }
 
 static ENGINE_ERROR_CODE default_get(ENGINE_HANDLE* handle,
                                      const void* cookie,
-                                     item** item,
+                                     item** it,
                                      const void* key,
                                      const int nkey,
                                      uint16_t vbucket) {
+   (void)cookie;
    if (vbucket != 0) {
       return ENGINE_ENOTSUP;
    }
-   *item = item_get(get_handle(handle), key, nkey);
-   if (*item != NULL) {
+   *it = item_get(get_handle(handle), key, nkey);
+   if (*it != NULL) {
       return ENGINE_SUCCESS;
    } else {
       return ENGINE_KEY_ENOENT;
@@ -307,13 +312,13 @@ static ENGINE_ERROR_CODE default_get_stats(ENGINE_HANDLE* handle,
       len = sprintf(val, "%"PRIu64, (uint64_t)engine->config.maxbytes);
       add_stat("engine_maxbytes", 15, val, len, cookie);
       pthread_mutex_unlock(&engine->stats.lock);
-   } else if (strncmp(stat_key, "slabs", 5) == 0) {
+   } else if (nkey == 5 && strncmp(stat_key, "slabs", 5) == 0) {
       slabs_stats(engine, add_stat, cookie);
-   } else if (strncmp(stat_key, "items", 5) == 0) {
+   } else if (nkey == 5 && strncmp(stat_key, "items", 5) == 0) {
       item_stats(engine, add_stat, cookie);
-   } else if (strncmp(stat_key, "sizes", 5) == 0) {
+   } else if (nkey == 5 && strncmp(stat_key, "sizes", 5) == 0) {
       item_stats_sizes(engine, add_stat, cookie);
-   } else if (strncmp(stat_key, "scrub", 5) == 0) {
+   } else if (nkey == 5 && strncmp(stat_key, "scrub", 5) == 0) {
       char val[128];
       int len;
 
@@ -346,7 +351,7 @@ static ENGINE_ERROR_CODE default_get_stats(ENGINE_HANDLE* handle,
 
 static ENGINE_ERROR_CODE default_store(ENGINE_HANDLE* handle,
                                        const void *cookie,
-                                       item* item,
+                                       item* it,
                                        uint64_t *cas,
                                        ENGINE_STORE_OPERATION operation,
                                        uint16_t vbucket) {
@@ -354,7 +359,7 @@ static ENGINE_ERROR_CODE default_store(ENGINE_HANDLE* handle,
       return ENGINE_ENOTSUP;
    }
 
-   return store_item(get_handle(handle), get_real_item(item), cas, operation,
+   return store_item(get_handle(handle), get_real_item(it), cas, operation,
                      cookie);
 }
 
@@ -376,9 +381,9 @@ static ENGINE_ERROR_CODE default_arithmetic(ENGINE_HANDLE* handle,
 
    ENGINE_ERROR_CODE ret = ENGINE_SUCCESS;
    struct default_engine *engine = get_handle(handle);
-   hash_item *item = item_get(engine, key, nkey);
+   hash_item *it = item_get(engine, key, nkey);
 
-   if (item == NULL) {
+   if (it == NULL) {
       if (!create) {
          return ENGINE_KEY_ENOENT;
       } else {
@@ -386,26 +391,26 @@ static ENGINE_ERROR_CODE default_arithmetic(ENGINE_HANDLE* handle,
          int len = snprintf(buffer, sizeof(buffer), "%"PRIu64"\r\n",
                             (uint64_t)initial);
 
-         item = item_alloc(engine, key, nkey, 0, exptime, len, cookie);
-         if (item == NULL) {
+         it = item_alloc(engine, key, nkey, 0, exptime, len, cookie);
+         if (it == NULL) {
             return ENGINE_ENOMEM;
          }
-         memcpy((void*)item_get_data(item), buffer, len);
-         if ((ret = store_item(engine, item, cas,
+         memcpy((void*)item_get_data(it), buffer, len);
+         if ((ret = store_item(engine, it, cas,
                                OPERATION_ADD, cookie)) == ENGINE_KEY_EEXISTS) {
-            item_release(engine, item);
+            item_release(engine, it);
             return default_arithmetic(handle, cookie, key, nkey, increment,
                                       create, delta, initial, exptime, cas,
                                       result, vbucket);
          }
 
          *result = initial;
-         *cas = item_get_cas(item);
-         item_release(engine, item);
+         *cas = item_get_cas(it);
+         item_release(engine, it);
       }
    } else {
-      ret = add_delta(engine, item, increment, delta, cas, result, cookie);
-      item_release(engine, item);
+      ret = add_delta(engine, it, increment, delta, cas, result, cookie);
+      item_release(engine, it);
    }
 
    return ret;
@@ -413,12 +418,14 @@ static ENGINE_ERROR_CODE default_arithmetic(ENGINE_HANDLE* handle,
 
 static ENGINE_ERROR_CODE default_flush(ENGINE_HANDLE* handle,
                                        const void* cookie, time_t when) {
+   (void)cookie;
    item_flush_expired(get_handle(handle), when);
 
    return ENGINE_SUCCESS;
 }
 
 static void default_reset_stats(ENGINE_HANDLE* handle, const void *cookie) {
+   (void)cookie;
    struct default_engine *engine = get_handle(handle);
    item_stats_reset(engine);
 
@@ -503,57 +510,60 @@ static ENGINE_ERROR_CODE default_unknown_command(ENGINE_HANDLE* handle,
 }
 
 
-uint64_t item_get_cas(const hash_item* item)
+uint64_t item_get_cas(const hash_item* it)
 {
-    if (item->iflag & ITEM_WITH_CAS) {
-        return *(uint64_t*)(item + 1);
+    if (it->iflag & ITEM_WITH_CAS) {
+        return *(uint64_t*)(it + 1);
     }
     return 0;
 }
 
-void item_set_cas(ENGINE_HANDLE *handle, item* item, uint64_t val)
+void item_set_cas(ENGINE_HANDLE *handle, item* itm, uint64_t val)
 {
-    hash_item* it = get_real_item(item);
+    (void)handle;
+    hash_item* it = get_real_item(itm);
     if (it->iflag & ITEM_WITH_CAS) {
         *(uint64_t*)(it + 1) = val;
     }
 }
 
-const void* item_get_key(const hash_item* item)
+const void* item_get_key(const hash_item* it)
 {
-    char *ret = (void*)(item + 1);
-    if (item->iflag & ITEM_WITH_CAS) {
+    char *ret = (void*)(it + 1);
+    if (it->iflag & ITEM_WITH_CAS) {
         ret += sizeof(uint64_t);
     }
 
     return ret;
 }
 
-char* item_get_data(const hash_item* item)
+char* item_get_data(const hash_item* it)
 {
-    return ((char*)item_get_key(item)) + item->nkey;
+    return ((char*)item_get_key(it)) + it->nkey;
 }
 
-uint8_t item_get_clsid(const hash_item* item)
+uint8_t item_get_clsid(const hash_item* it)
 {
+    (void)it;
     return 0;
 }
 
-static bool get_item_info(ENGINE_HANDLE *handle, const item* item, item_info *item_info)
+static bool get_item_info(ENGINE_HANDLE *handle, const item* itm, item_info *info)
 {
-    hash_item* it = (hash_item*)item;
-    if (item_info->nvalue < 1) {
+    (void)handle;
+    hash_item* it = (hash_item*)itm;
+    if (info->nvalue < 1) {
         return false;
     }
-    item_info->cas = item_get_cas(it);
-    item_info->exptime = it->exptime;
-    item_info->nbytes = it->nbytes;
-    item_info->flags = it->flags;
-    item_info->clsid = it->slabs_clsid;
-    item_info->nkey = it->nkey;
-    item_info->nvalue = 1;
-    item_info->key = item_get_key(it);
-    item_info->value[0].iov_base = item_get_data(it);
-    item_info->value[0].iov_len = it->nbytes;
+    info->cas = item_get_cas(it);
+    info->exptime = it->exptime;
+    info->nbytes = it->nbytes;
+    info->flags = it->flags;
+    info->clsid = it->slabs_clsid;
+    info->nkey = it->nkey;
+    info->nvalue = 1;
+    info->key = item_get_key(it);
+    info->value[0].iov_base = item_get_data(it);
+    info->value[0].iov_len = it->nbytes;
     return true;
 }

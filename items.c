@@ -55,8 +55,8 @@ void item_stats_reset(struct default_engine *engine) {
 
 /* warning: don't use these macros with a function, as it evals its arg twice */
 static inline size_t ITEM_ntotal(struct default_engine *engine,
-                                 const hash_item *item) {
-    size_t ret = sizeof(*item) + item->nkey + item->nbytes;
+                                 const hash_item *it) {
+    size_t ret = sizeof(*it) + it->nkey + it->nbytes;
     if (engine->config.use_cas) {
         ret += sizeof(uint64_t);
     }
@@ -78,7 +78,7 @@ static uint64_t get_cas_id(void) {
                         (it->it_flags & ITEM_LINKED) ? 'L' : ' ', \
                         (it->it_flags & ITEM_SLABBED) ? 'S' : ' ')
 #else
-# define DEBUG_REFCNT(it,op) while(0)
+# define DEBUG_REFCNT(it,op) do {} while(0)
 #endif
 
 
@@ -359,7 +359,7 @@ int do_item_replace(struct default_engine *engine,
 }
 
 /*@null@*/
-static char *do_item_cachedump(const unsigned int slabs_clsid,
+static char *do_item_cachedump(const unsigned int clsid,
                                const unsigned int limit,
                                unsigned int *bytes) {
 #ifdef FUTURE
@@ -372,7 +372,7 @@ static char *do_item_cachedump(const unsigned int slabs_clsid,
     char key_temp[KEY_MAX_LENGTH + 1];
     char temp[512];
 
-    it = engine->items.heads[slabs_clsid];
+    it = engine->items.heads[clsid];
 
     buffer = malloc((size_t)memlimit);
     if (buffer == 0) return NULL;
@@ -402,7 +402,7 @@ static char *do_item_cachedump(const unsigned int slabs_clsid,
     *bytes = bufcurr;
     return buffer;
 #endif
-    (void)slabs_clsid;
+    (void)clsid;
     (void)limit;
     (void)bytes;
     return NULL;
@@ -465,8 +465,8 @@ static void do_item_stats_sizes(struct default_engine *engine,
                 int klen, vlen;
                 klen = snprintf(key, sizeof(key), "%d", i * 32);
                 vlen = snprintf(val, sizeof(val), "%u", histogram[i]);
-                assert(klen < sizeof(key));
-                assert(vlen < sizeof(val));
+                assert(klen < (int)sizeof(key));
+                assert(vlen < (int)sizeof(val));
                 add_stats(key, klen, val, vlen, c);
             }
         }
@@ -690,7 +690,7 @@ static ENGINE_ERROR_CODE do_add_delta(struct default_engine *engine,
     if (incr) {
         value += delta;
     } else {
-        if(delta > value) {
+        if ((uint64_t)delta > value) {
             value = 0;
         } else {
             value -= delta;
@@ -750,18 +750,18 @@ hash_item *item_get(struct default_engine *engine,
  * Decrements the reference count on an item and adds it to the freelist if
  * needed.
  */
-void item_release(struct default_engine *engine, hash_item *item) {
+void item_release(struct default_engine *engine, hash_item *it) {
     pthread_mutex_lock(&engine->cache_lock);
-    do_item_release(engine, item);
+    do_item_release(engine, it);
     pthread_mutex_unlock(&engine->cache_lock);
 }
 
 /*
  * Unlinks an item from the LRU and hashtable.
  */
-void item_unlink(struct default_engine *engine, hash_item *item) {
+void item_unlink(struct default_engine *engine, hash_item *it) {
     pthread_mutex_lock(&engine->cache_lock);
-    do_item_unlink(engine, item);
+    do_item_unlink(engine, it);
     pthread_mutex_unlock(&engine->cache_lock);
 }
 
@@ -769,13 +769,13 @@ void item_unlink(struct default_engine *engine, hash_item *item) {
  * Does arithmetic on a numeric item value.
  */
 ENGINE_ERROR_CODE add_delta(struct default_engine *engine,
-                            hash_item *item, const bool incr,
+                            hash_item *it, const bool incr,
                             const int64_t delta, uint64_t *rcas,
                             uint64_t *result, const void *cookie) {
     ENGINE_ERROR_CODE ret;
 
     pthread_mutex_lock(&engine->cache_lock);
-    ret = do_add_delta(engine, item, incr, delta, rcas, result, cookie);
+    ret = do_add_delta(engine, it, incr, delta, rcas, result, cookie);
     pthread_mutex_unlock(&engine->cache_lock);
     return ret;
 }
@@ -784,13 +784,13 @@ ENGINE_ERROR_CODE add_delta(struct default_engine *engine,
  * Stores an item in the cache (high level, obeys set/add/replace semantics)
  */
 ENGINE_ERROR_CODE store_item(struct default_engine *engine,
-                             hash_item *item, uint64_t *cas,
+                             hash_item *it, uint64_t *cas,
                              ENGINE_STORE_OPERATION operation,
                              const void *cookie) {
     ENGINE_ERROR_CODE ret;
 
     pthread_mutex_lock(&engine->cache_lock);
-    ret = do_store_item(engine, item, cas, operation, cookie);
+    ret = do_store_item(engine, it, cas, operation, cookie);
     pthread_mutex_unlock(&engine->cache_lock);
     return ret;
 }
@@ -839,19 +839,19 @@ void item_flush_expired(struct default_engine *engine, time_t when) {
  * Dumps part of the cache
  */
 char *item_cachedump(struct default_engine *engine,
-                     unsigned int slabs_clsid,
+                     unsigned int clsid,
                      unsigned int limit,
                      unsigned int *bytes) {
     char *ret;
 
     pthread_mutex_lock(&engine->cache_lock);
-    ret = do_item_cachedump(slabs_clsid, limit, bytes);
+    ret = do_item_cachedump(clsid, limit, bytes);
     pthread_mutex_unlock(&engine->cache_lock);
     return ret;
 }
 
 void item_stats(struct default_engine *engine,
-                   ADD_STAT add_stat, const void *cookie)
+                ADD_STAT add_stat, const void *cookie)
 {
     pthread_mutex_lock(&engine->cache_lock);
     do_item_stats(engine, add_stat, (void*)cookie);
@@ -925,14 +925,14 @@ static bool do_item_walk_cursor(struct default_engine *engine,
 }
 
 static ENGINE_ERROR_CODE item_scrub(struct default_engine *engine,
-                                    hash_item *item,
+                                    hash_item *it,
                                     void *cookie) {
     (void)cookie;
     engine->scrubber.visited++;
     rel_time_t current_time = engine->server.core->get_current_time();
-    if (item->refcount == 0 &&
-        (item->exptime != 0 && item->exptime < current_time)) {
-        do_item_unlink(engine, item);
+    if (it->refcount == 0 &&
+        (it->exptime != 0 && it->exptime < current_time)) {
+        do_item_unlink(engine, it);
         engine->scrubber.cleaned++;
     }
     return ENGINE_SUCCESS;

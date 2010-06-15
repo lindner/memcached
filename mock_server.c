@@ -57,11 +57,14 @@ static int mock_get_socket_fd(const void *cookie) {
     return c->sfd;
 }
 
-static const char *mock_get_server_version() {
+static const char *mock_get_server_version(void) {
     return "mock server";
 }
 
 static uint32_t mock_hash( const void *key, size_t length, const uint32_t initval) {
+    (void)key;
+    (void)length;
+    (void)initval;
     //this is a very stupid hash indeed
     return 1;
 }
@@ -118,6 +121,8 @@ static void mock_release_independent_stats(void *stats) {
 }
 
 static void mock_count_eviction(const void *cookie, const void *key, const int nkey) {
+    (void)key;
+    (void)nkey;
     struct mock_connstruct *c = (struct mock_connstruct *)cookie;
     c->evictions++;
 }

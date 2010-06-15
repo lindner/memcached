@@ -3687,7 +3687,7 @@ static inline void process_get_command(conn *c, token_t *tokens, size_t ntokens,
                  */
 
                 MEMCACHED_COMMAND_GET(c->sfd, info.key, info.nkey,
-                                      info.nbytes, item_get_cas(it));
+                                      info.nbytes, info.cas);
                 if (return_cas)
                 {
 

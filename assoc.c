@@ -29,16 +29,16 @@ ENGINE_ERROR_CODE assoc_init(struct default_engine *engine) {
     return (engine->assoc.primary_hashtable != NULL) ? ENGINE_SUCCESS : ENGINE_ENOMEM;
 }
 
-hash_item *assoc_find(struct default_engine *engine, uint32_t hash, const char *key, const size_t nkey) {
+hash_item *assoc_find(struct default_engine *engine, uint32_t hashval, const char *key, const size_t nkey) {
     hash_item *it;
     unsigned int oldbucket;
 
     if (engine->assoc.expanding &&
-        (oldbucket = (hash & hashmask(engine->assoc.hashpower - 1))) >= engine->assoc.expand_bucket)
+        (oldbucket = (hashval & hashmask(engine->assoc.hashpower - 1))) >= engine->assoc.expand_bucket)
     {
         it = engine->assoc.old_hashtable[oldbucket];
     } else {
-        it = engine->assoc.primary_hashtable[hash & hashmask(engine->assoc.hashpower)];
+        it = engine->assoc.primary_hashtable[hashval & hashmask(engine->assoc.hashpower)];
     }
 
     hash_item *ret = NULL;
@@ -59,18 +59,18 @@ hash_item *assoc_find(struct default_engine *engine, uint32_t hash, const char *
    the item wasn't found */
 
 static hash_item** _hashitem_before(struct default_engine *engine,
-                                    uint32_t hash,
+                                    uint32_t hashval,
                                     const char *key,
                                     const size_t nkey) {
     hash_item **pos;
     unsigned int oldbucket;
 
     if (engine->assoc.expanding &&
-        (oldbucket = (hash & hashmask(engine->assoc.hashpower - 1))) >= engine->assoc.expand_bucket)
+        (oldbucket = (hashval & hashmask(engine->assoc.hashpower - 1))) >= engine->assoc.expand_bucket)
     {
         pos = &engine->assoc.old_hashtable[oldbucket];
     } else {
-        pos = &engine->assoc.primary_hashtable[hash & hashmask(engine->assoc.hashpower)];
+        pos = &engine->assoc.primary_hashtable[hashval & hashmask(engine->assoc.hashpower)];
     }
 
     while (*pos && ((nkey != (*pos)->nkey) || memcmp(key, item_get_key(*pos), nkey))) {
@@ -109,19 +109,19 @@ static void assoc_expand(struct default_engine *engine) {
 }
 
 /* Note: this isn't an assoc_update.  The key must not already exist to call this */
-int assoc_insert(struct default_engine *engine, uint32_t hash, hash_item *it) {
+int assoc_insert(struct default_engine *engine, uint32_t hashval, hash_item *it) {
     unsigned int oldbucket;
 
-    assert(assoc_find(engine, hash, item_get_key(it), it->nkey) == 0);  /* shouldn't have duplicately named things defined */
+    assert(assoc_find(engine, hashval, item_get_key(it), it->nkey) == 0);  /* shouldn't have duplicately named things defined */
 
     if (engine->assoc.expanding &&
-        (oldbucket = (hash & hashmask(engine->assoc.hashpower - 1))) >= engine->assoc.expand_bucket)
+        (oldbucket = (hashval & hashmask(engine->assoc.hashpower - 1))) >= engine->assoc.expand_bucket)
     {
         it->h_next = engine->assoc.old_hashtable[oldbucket];
         engine->assoc.old_hashtable[oldbucket] = it;
     } else {
-        it->h_next = engine->assoc.primary_hashtable[hash & hashmask(engine->assoc.hashpower)];
-        engine->assoc.primary_hashtable[hash & hashmask(engine->assoc.hashpower)] = it;
+        it->h_next = engine->assoc.primary_hashtable[hashval & hashmask(engine->assoc.hashpower)];
+        engine->assoc.primary_hashtable[hashval & hashmask(engine->assoc.hashpower)] = it;
     }
 
     engine->assoc.hash_items++;
@@ -129,12 +129,12 @@ int assoc_insert(struct default_engine *engine, uint32_t hash, hash_item *it) {
         assoc_expand(engine);
     }
 
-    MEMCACHED_ASSOC_INSERT(item_get_key(&it), it->nkey, hash_items);
+    MEMCACHED_ASSOC_INSERT(item_get_key(it), it->nkey, engine->assoc.hash_items);
     return 1;
 }
 
-void assoc_delete(struct default_engine *engine, uint32_t hash, const char *key, const size_t nkey) {
-    hash_item **before = _hashitem_before(engine, hash, key, nkey);
+void assoc_delete(struct default_engine *engine, uint32_t hashval, const char *key, const size_t nkey) {
+    hash_item **before = _hashitem_before(engine, hashval, key, nkey);
 
     if (*before) {
         hash_item *nxt;
@@ -142,7 +142,7 @@ void assoc_delete(struct default_engine *engine, uint32_t hash, const char *key,
         /* The DTrace probe cannot be triggered as the last instruction
          * due to possible tail-optimization by the compiler
          */
-        MEMCACHED_ASSOC_DELETE(key, nkey, hash_items);
+        MEMCACHED_ASSOC_DELETE(key, nkey, engine->assoc.hash_items);
         nxt = (*before)->h_next;
         (*before)->h_next = 0;   /* probably pointless, but whatever. */
         *before = nxt;

@@ -440,7 +440,7 @@ int number_of_pending(conn *c, conn *pending);
 
 void init_check_stdin(struct event_base *base);
 
-#if HAVE_DROP_PRIVILEGES
+#ifdef HAVE_DROP_PRIVILEGES
 extern void drop_privileges(void);
 #else
 #define drop_privileges()

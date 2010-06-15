@@ -97,7 +97,7 @@ static ENGINE_HANDLE_V1 *start_your_engines(const char *engine, const char* cfg,
     return handle_v1;
 }
 
-static void destroy_engine() {
+static void destroy_engine(void) {
     if (handle_v1) {
         handle_v1->destroy(handle);
         handle_v1 = NULL;
@@ -231,15 +231,15 @@ int main(int argc, char **argv) {
     }
 
     //load test_suite
-    void* handle = dlopen(test_suite, RTLD_NOW | RTLD_LOCAL);
-    if (handle == NULL) {
+    void* sohandle = dlopen(test_suite, RTLD_NOW | RTLD_LOCAL);
+    if (sohandle == NULL) {
         const char *msg = dlerror();
         fprintf(stderr, "Failed to load testsuite %s: %s\n", test_suite, msg ? msg : "unknown error");
         return 1;
     }
 
     //get the test cases
-    void *symbol = dlsym(handle, "get_tests");
+    void *symbol = dlsym(sohandle, "get_tests");
     if (symbol == NULL) {
         const char *msg = dlerror();
         fprintf(stderr, "Could not find get_tests function in testsuite %s: %s\n", test_suite, msg ? msg : "unknown error");
@@ -253,7 +253,7 @@ int main(int argc, char **argv) {
                                     .engine_path = engine,
                                     .reload_engine = reload_engine,
                                     .start_engine = start_your_engines};
-    symbol = dlsym(handle, "setup_suite");
+    symbol = dlsym(sohandle, "setup_suite");
     if (symbol != NULL) {
         my_setup_suite.voidptr = symbol;
         if (!(*my_setup_suite.setup_suite)(&harness)) {
@@ -277,7 +277,7 @@ int main(int argc, char **argv) {
     }
 
     //tear down the suite if needed
-    symbol = dlsym(handle, "teardown_suite");
+    symbol = dlsym(sohandle, "teardown_suite");
     if (symbol != NULL) {
         my_teardown_suite.voidptr = symbol;
         if (!(*my_teardown_suite.teardown_suite)()) {

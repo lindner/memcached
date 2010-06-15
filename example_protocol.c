@@ -53,6 +53,11 @@ static const char *get_name(const void *cmd_cookie) {
 static bool accept_command(const void *cmd_cookie, void *cookie,
                            int argc, token_t *argv, size_t *ndata,
                            char **ptr) {
+    (void)cookie;
+    (void)argc;
+    (void)ndata;
+    (void)ptr;
+
     if (cmd_cookie == &noop_descriptor) {
         return strcmp(argv[0].value, "noop") == 0;
     } else {
@@ -86,16 +91,15 @@ static bool execute_command(const void *cmd_cookie, const void *cookie,
 
 static void abort_command(const void *cmd_cookie, const void *cookie)
 {
+    (void)cmd_cookie;
+    (void)cookie;
     /* EMPTY */
 }
 
-#if defined (__SUNPRO_C) && (__SUNPRO_C >= 0x550)
-__global
-#elif defined __GNUC__
-__attribute__ ((visibility("default")))
-#endif
+MEMCACHED_PUBLIC_API
 EXTENSION_ERROR_CODE memcached_extensions_initialize(const char *config,
                                                      GET_SERVER_API get_server_api) {
+    (void)config;
     SERVER_HANDLE_V1 *server = get_server_api();
     if (server == NULL) {
         return EXTENSION_FATAL;

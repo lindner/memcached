@@ -218,22 +218,32 @@ static enum test_result item_set_cas_test(ENGINE_HANDLE *h, ENGINE_HANDLE_V1 *h1
 }
 
 static enum test_result get_stats_test(ENGINE_HANDLE *h, ENGINE_HANDLE_V1 *h1) {
+    (void)h;
+    (void)h1;
     return PENDING;
 }
 
 static enum test_result reset_stats_test(ENGINE_HANDLE *h, ENGINE_HANDLE_V1 *h1) {
+    (void)h;
+    (void)h1;
     return PENDING;
 }
 
 static enum test_result get_stats_struct_test(ENGINE_HANDLE *h, ENGINE_HANDLE_V1 *h1) {
+    (void)h;
+    (void)h1;
     return PENDING;
 }
 
 static enum test_result aggregate_stats_test(ENGINE_HANDLE *h, ENGINE_HANDLE_V1 *h1) {
+    (void)h;
+    (void)h1;
     return PENDING;
 }
 
 static enum test_result unknown_command_test(ENGINE_HANDLE *h, ENGINE_HANDLE_V1 *h1) {
+    (void)h;
+    (void)h1;
     return PENDING;
 }
 

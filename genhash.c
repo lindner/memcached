@@ -63,7 +63,7 @@ estimate_table_size(int est)
     magn=(int)log((double)est)/log(2);
     magn--;
     magn = (magn < 0) ? 0 : magn;
-    assert(magn < (sizeof(prime_size_table) / sizeof(int)));
+    assert(magn < (int)(sizeof(prime_size_table) / sizeof(int)));
     rv=prime_size_table[magn];
     return rv;
 }
@@ -111,7 +111,7 @@ genhash_store(genhash_t *h, const void* k, size_t klen,
 
     n=h->ops.hashfunc(k, klen) % h->size;
     assert(n >= 0);
-    assert(n < h->size);
+    assert(n < (int)h->size);
 
     p=calloc(1, sizeof(struct genhash_entry_t));
     assert(p);
@@ -134,7 +134,7 @@ genhash_find_entry(genhash_t *h, const void* k, size_t klen)
     assert(h != NULL);
     n=h->ops.hashfunc(k, klen) % h->size;
     assert(n >= 0);
-    assert(n < h->size);
+    assert(n < (int)h->size);
 
     p=h->buckets[n];
     for(p=h->buckets[n]; p && !h->ops.hasheq(k, klen, p->key, p->nkey); p=p->next);
@@ -183,6 +183,7 @@ genhash_fun_update(genhash_t* h, const void* k, size_t klen,
                    void *arg,
                    const void *def, size_t deflen)
 {
+    (void)deflen;
     struct genhash_entry_t *p;
     enum update_type rv=0;
     size_t newSize = 0;
@@ -224,7 +225,7 @@ genhash_delete(genhash_t* h, const void* k, size_t klen)
     assert(h != NULL);
     n=h->ops.hashfunc(k, klen) % h->size;
     assert(n >= 0);
-    assert(n < h->size);
+    assert(n < (int)h->size);
 
     if(h->buckets[n] != NULL) {
         /* Special case the first one */
@@ -265,11 +266,10 @@ genhash_iter(genhash_t* h,
                               const void* val, size_t nval,
                               void *arg), void *arg)
 {
-    int i=0;
     struct genhash_entry_t *p=NULL;
     assert(h != NULL);
 
-    for(i=0; i<h->size; i++) {
+    for(unsigned int i= 0; i<h->size; i++) {
         for(p=h->buckets[i]; p!=NULL; p=p->next) {
             iterfunc(p->key, p->nkey, p->value, p->nvalue, arg);
         }
@@ -279,10 +279,10 @@ genhash_iter(genhash_t* h,
 int
 genhash_clear(genhash_t *h)
 {
-    int i = 0, rv = 0;
+    int rv = 0;
     assert(h != NULL);
 
-    for(i = 0; i < h->size; i++) {
+    for (unsigned int i = 0; i < h->size; i++) {
         while(h->buckets[i]) {
             struct genhash_entry_t *p = NULL;
             p = h->buckets[i];
@@ -298,6 +298,10 @@ static void
 count_entries(const void *key, size_t klen,
               const void *val, size_t vlen, void *arg)
 {
+    (void)key;
+    (void)klen;
+    (void)val;
+    (void)vlen;
     int *count=(int *)arg;
     (*count)++;
 }
@@ -331,7 +335,7 @@ genhash_iter_key(genhash_t* h, const void* key, size_t klen,
     assert(h != NULL);
     n=h->ops.hashfunc(key, klen) % h->size;
     assert(n >= 0);
-    assert(n < h->size);
+    assert(n < (int)h->size);
 
     for(p=h->buckets[n]; p!=NULL; p=p->next) {
         if(h->ops.hasheq(key, klen, p->key, p->nkey)) {
@@ -344,10 +348,9 @@ int
 genhash_string_hash(const void* p, size_t nkey)
 {
     int rv=5381;
-    int i=0;
     char *str=(char *)p;
 
-    for(i=0; i < nkey; i++) {
+    for(unsigned int i=0; i < nkey; i++) {
         assert(str[i]);
         rv = ((rv << 5) + rv) ^ str[i];
     }

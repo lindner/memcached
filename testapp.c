@@ -46,6 +46,8 @@ static enum test_return cache_create_test(void)
 const uint64_t constructor_pattern = 0xdeadcafebabebeef;
 
 static int cache_constructor(void *buffer, void *notused1, int notused2) {
+    (void)notused1;
+    (void)notused2;
     uint64_t *ptr = buffer;
     *ptr = constructor_pattern;
     return 0;
@@ -64,6 +66,9 @@ static enum test_return cache_constructor_test(void)
 }
 
 static int cache_fail_constructor(void *buffer, void *notused1, int notused2) {
+    (void)buffer;
+    (void)notused1;
+    (void)notused2;
     return 1;
 }
 
@@ -85,6 +90,7 @@ static enum test_return cache_fail_constructor_test(void)
 static void *destruct_data = 0;
 
 static void cache_destructor(void *buffer, void *notused) {
+    (void)notused;
     destruct_data = buffer;
 }
 
@@ -277,11 +283,11 @@ static enum test_return test_safe_strtof(void) {
  *
  * @param port_out where to store the TCP port number the server is
  *                 listening on
- * @param daemon set to true if you want to run the memcached server
+ * @param dodaemon set to true if you want to run the memcached server
  *               as a daemon process
  * @return the pid of the memcached server
  */
-static pid_t start_server(in_port_t *port_out, bool daemon, int timeout) {
+static pid_t start_server(in_port_t *port_out, bool dodaemon, int timeout) {
     char environment[80];
     snprintf(environment, sizeof(environment),
              "MEMCACHED_PORT_FILENAME=/tmp/ports.%lu", (long)getpid());
@@ -319,7 +325,7 @@ static pid_t start_server(in_port_t *port_out, bool daemon, int timeout) {
 
         putenv(environment);
 
-        if (!daemon) {
+        if (!dodaemon) {
             argv[arg++] = "./timedrun";
             argv[arg++] = tmo;
         }
@@ -335,7 +341,7 @@ static pid_t start_server(in_port_t *port_out, bool daemon, int timeout) {
             argv[arg++] = "-u";
             argv[arg++] = "root";
         }
-        if (daemon) {
+        if (dodaemon) {
             argv[arg++] = "-d";
             argv[arg++] = "-P";
             argv[arg++] = pid_file;
@@ -371,7 +377,7 @@ static pid_t start_server(in_port_t *port_out, bool daemon, int timeout) {
     fclose(fp);
     assert(remove(filename) == 0);
 
-    if (daemon) {
+    if (dodaemon) {
         /* loop and wait for the pid file.. There is a potential race
          * condition that the server just created the file but isn't
          * finished writing the content, but I'll take the chance....
@@ -398,8 +404,8 @@ static pid_t start_server(in_port_t *port_out, bool daemon, int timeout) {
 }
 
 static enum test_return test_issue_44(void) {
-    in_port_t port;
-    pid_t pid = start_server(&port, true, 15);
+    in_port_t myport;
+    pid_t pid = start_server(&myport, true, 15);
     assert(kill(pid, SIGHUP) == 0);
     sleep(1);
     assert(kill(pid, SIGTERM) == 0);
@@ -407,7 +413,7 @@ static enum test_return test_issue_44(void) {
     return TEST_PASS;
 }
 
-static struct addrinfo *lookuphost(const char *hostname, in_port_t port)
+static struct addrinfo *lookuphost(const char *hostname, in_port_t inport)
 {
     struct addrinfo *ai = 0;
     struct addrinfo hints = { .ai_family = AF_UNSPEC,
@@ -416,7 +422,7 @@ static struct addrinfo *lookuphost(const char *hostname, in_port_t port)
     char service[NI_MAXSERV];
     int error;
 
-    (void)snprintf(service, NI_MAXSERV, "%d", port);
+    (void)snprintf(service, NI_MAXSERV, "%d", inport);
     if ((error = getaddrinfo(hostname, service, &hints, &ai)) != 0) {
        if (error != EAI_SYSTEM) {
           fprintf(stderr, "getaddrinfo(): %s\n", gai_strerror(error));
@@ -428,25 +434,25 @@ static struct addrinfo *lookuphost(const char *hostname, in_port_t port)
     return ai;
 }
 
-static int connect_server(const char *hostname, in_port_t port, bool nonblock)
+static int connect_server(const char *hostname, in_port_t toport, bool nonblock)
 {
-    struct addrinfo *ai = lookuphost(hostname, port);
-    int sock = -1;
+    struct addrinfo *ai = lookuphost(hostname, toport);
+    int mysock = -1;
     if (ai != NULL) {
-       if ((sock = socket(ai->ai_family, ai->ai_socktype,
-                          ai->ai_protocol)) != -1) {
-          if (connect(sock, ai->ai_addr, ai->ai_addrlen) == -1) {
+       if ((mysock = socket(ai->ai_family, ai->ai_socktype,
+                            ai->ai_protocol)) != -1) {
+          if (connect(mysock, ai->ai_addr, ai->ai_addrlen) == -1) {
              fprintf(stderr, "Failed to connect socket: %s\n",
                      strerror(errno));
-             close(sock);
-             sock = -1;
+             close(mysock);
+             mysock = -1;
           } else if (nonblock) {
-              int flags = fcntl(sock, F_GETFL, 0);
-              if (flags < 0 || fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) {
+              int flags = fcntl(mysock, F_GETFL, 0);
+              if (flags < 0 || fcntl(mysock, F_SETFL, flags | O_NONBLOCK) < 0) {
                   fprintf(stderr, "Failed to enable nonblocking mode: %s\n",
                           strerror(errno));
-                  close(sock);
-                  sock = -1;
+                  close(mysock);
+                  mysock = -1;
               }
           }
        } else {
@@ -455,7 +461,7 @@ static int connect_server(const char *hostname, in_port_t port, bool nonblock)
 
        freeaddrinfo(ai);
     }
-    return sock;
+    return mysock;
 }
 
 static enum test_return test_vperror(void) {
@@ -635,7 +641,7 @@ static void send_ascii_command(const char *buf) {
         } else {
             offset += nw;
         }
-    } while (offset < len);
+    } while (offset < (off_t)len);
 }
 
 /*
@@ -661,7 +667,7 @@ static void read_ascii_response(char *buffer, size_t size) {
                 buffer[offset + 1] = '\0';
             }
             offset += nr;
-            assert(offset + 1 < size);
+            assert(offset + 1 < (off_t)size);
         }
     } while (need_more);
 }
@@ -789,7 +795,7 @@ static void safe_send(const void* buf, size_t len, bool hickup)
             }
             offset += nw;
         }
-    } while (offset < len);
+    } while (offset < (off_t)len);
 }
 
 static bool safe_recv(void *buf, size_t len) {
@@ -811,7 +817,7 @@ static bool safe_recv(void *buf, size_t len) {
             assert(nr != 0);
             offset += nr;
         }
-    } while (offset < len);
+    } while (offset < (off_t)len);
 
     return true;
 }
@@ -1121,16 +1127,16 @@ static enum test_return test_binary_set_impl(const char *key, uint8_t cmd) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, receive;
+    } sendbuffer, receive;
     uint64_t value = 0xdeadbeefdeadcafe;
-    size_t len = storage_command(send.bytes, sizeof(send.bytes), cmd,
+    size_t len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                                  key, strlen(key), &value, sizeof(value),
                                  0, 0);
 
     /* Set should work over and over again */
     int ii;
     for (ii = 0; ii < 10; ++ii) {
-        safe_send(send.bytes, len, false);
+        safe_send(sendbuffer.bytes, len, false);
         if (cmd == PROTOCOL_BINARY_CMD_SET) {
             safe_recv_packet(receive.bytes, sizeof(receive.bytes));
             validate_response_header(&receive.response, cmd,
@@ -1142,13 +1148,13 @@ static enum test_return test_binary_set_impl(const char *key, uint8_t cmd) {
         return test_binary_noop();
     }
 
-    send.request.message.header.request.cas = receive.response.message.header.response.cas;
-    safe_send(send.bytes, len, false);
+    sendbuffer.request.message.header.request.cas = receive.response.message.header.response.cas;
+    safe_send(sendbuffer.bytes, len, false);
     if (cmd == PROTOCOL_BINARY_CMD_SET) {
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
         validate_response_header(&receive.response, cmd,
                                  PROTOCOL_BINARY_RESPONSE_SUCCESS);
-        assert(receive.response.message.header.response.cas != send.request.message.header.request.cas);
+        assert(receive.response.message.header.response.cas != sendbuffer.request.message.header.request.cas);
     } else {
         return test_binary_noop();
     }
@@ -1170,15 +1176,15 @@ static enum test_return test_binary_add_impl(const char *key, uint8_t cmd) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, receive;
-    size_t len = storage_command(send.bytes, sizeof(send.bytes), cmd, key,
+    } sendbuffer, receive;
+    size_t len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd, key,
                                  strlen(key), &value, sizeof(value),
                                  0, 0);
 
     /* Add should only work the first time */
     int ii;
     for (ii = 0; ii < 10; ++ii) {
-        safe_send(send.bytes, len, false);
+        safe_send(sendbuffer.bytes, len, false);
         if (ii == 0) {
             if (cmd == PROTOCOL_BINARY_CMD_ADD) {
                 safe_recv_packet(receive.bytes, sizeof(receive.bytes));
@@ -1209,27 +1215,27 @@ static enum test_return test_binary_replace_impl(const char* key, uint8_t cmd) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, receive;
-    size_t len = storage_command(send.bytes, sizeof(send.bytes), cmd,
+    } sendbuffer, receive;
+    size_t len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                                  key, strlen(key), &value, sizeof(value),
                                  0, 0);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, cmd,
                              PROTOCOL_BINARY_RESPONSE_KEY_ENOENT);
-    len = storage_command(send.bytes, sizeof(send.bytes),
+    len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                           PROTOCOL_BINARY_CMD_ADD,
                           key, strlen(key), &value, sizeof(value), 0, 0);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_ADD,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
-    len = storage_command(send.bytes, sizeof(send.bytes), cmd,
+    len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                           key, strlen(key), &value, sizeof(value), 0, 0);
     int ii;
     for (ii = 0; ii < 10; ++ii) {
-        safe_send(send.bytes, len, false);
+        safe_send(sendbuffer.bytes, len, false);
         if (cmd == PROTOCOL_BINARY_CMD_REPLACE) {
             safe_recv_packet(receive.bytes, sizeof(receive.bytes));
             validate_response_header(&receive.response,
@@ -1260,25 +1266,25 @@ static enum test_return test_binary_delete_impl(const char *key, uint8_t cmd) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, receive;
-    size_t len = raw_command(send.bytes, sizeof(send.bytes), cmd,
+    } sendbuffer, receive;
+    size_t len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                              key, strlen(key), NULL, 0);
 
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, cmd,
                              PROTOCOL_BINARY_RESPONSE_KEY_ENOENT);
-    len = storage_command(send.bytes, sizeof(send.bytes),
+    len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                           PROTOCOL_BINARY_CMD_ADD,
                           key, strlen(key), NULL, 0, 0, 0);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_ADD,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
-    len = raw_command(send.bytes, sizeof(send.bytes),
+    len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                       cmd, key, strlen(key), NULL, 0);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
 
     if (cmd == PROTOCOL_BINARY_CMD_DELETE) {
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
@@ -1286,7 +1292,7 @@ static enum test_return test_binary_delete_impl(const char *key, uint8_t cmd) {
                                  PROTOCOL_BINARY_RESPONSE_SUCCESS);
     }
 
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, cmd,
                              PROTOCOL_BINARY_RESPONSE_KEY_ENOENT);
@@ -1309,20 +1315,20 @@ static enum test_return test_binary_get_impl(const char *key, uint8_t cmd) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, receive;
-    size_t len = raw_command(send.bytes, sizeof(send.bytes), cmd,
+    } sendbuffer, receive;
+    size_t len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                              key, strlen(key), NULL, 0);
 
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, cmd,
                              PROTOCOL_BINARY_RESPONSE_KEY_ENOENT);
 
-    len = storage_command(send.bytes, sizeof(send.bytes),
+    len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                           PROTOCOL_BINARY_CMD_ADD,
                           key, strlen(key), NULL, 0,
                           0, 0);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_ADD,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
@@ -1337,11 +1343,11 @@ static enum test_return test_binary_get_impl(const char *key, uint8_t cmd) {
         } temp;
         size_t l = raw_command(temp.bytes, sizeof(temp.bytes),
                                cmd, key, strlen(key), NULL, 0);
-        memcpy(send.bytes + len, temp.bytes, l);
+        memcpy(sendbuffer.bytes + len, temp.bytes, l);
         len += l;
     }
 
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     for (ii = 0; ii < 10; ++ii) {
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
         validate_response_header(&receive.response, cmd,
@@ -1365,8 +1371,8 @@ static enum test_return test_binary_getq_impl(const char *key, uint8_t cmd) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, temp, receive;
-    size_t len = storage_command(send.bytes, sizeof(send.bytes),
+    } sendbuffer, temp, receive;
+    size_t len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                                  PROTOCOL_BINARY_CMD_ADD,
                                  key, strlen(key), NULL, 0,
                                  0, 0);
@@ -1375,15 +1381,15 @@ static enum test_return test_binary_getq_impl(const char *key, uint8_t cmd) {
     /* I need to change the first opaque so that I can separate the two
      * return packets */
     temp.request.message.header.request.opaque = 0xfeedface;
-    memcpy(send.bytes + len, temp.bytes, len2);
+    memcpy(sendbuffer.bytes + len, temp.bytes, len2);
     len += len2;
 
     len2 = raw_command(temp.bytes, sizeof(temp.bytes), cmd,
                        key, strlen(key), NULL, 0);
-    memcpy(send.bytes + len, temp.bytes, len2);
+    memcpy(sendbuffer.bytes + len, temp.bytes, len2);
     len += len2;
 
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_ADD,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
@@ -1409,18 +1415,18 @@ static enum test_return test_binary_incr_impl(const char* key, uint8_t cmd) {
         protocol_binary_response_no_extras response_header;
         protocol_binary_response_incr response;
         char bytes[1024];
-    } send, receive;
-    size_t len = arithmetic_command(send.bytes, sizeof(send.bytes), cmd,
+    } sendbuffer, receive;
+    size_t len = arithmetic_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                                     key, strlen(key), 1, 0, 0);
 
     int ii;
     for (ii = 0; ii < 10; ++ii) {
-        safe_send(send.bytes, len, false);
+        safe_send(sendbuffer.bytes, len, false);
         if (cmd == PROTOCOL_BINARY_CMD_INCREMENT) {
             safe_recv_packet(receive.bytes, sizeof(receive.bytes));
             validate_response_header(&receive.response_header, cmd,
                                      PROTOCOL_BINARY_RESPONSE_SUCCESS);
-            assert(ntohll(receive.response.message.body.value) == ii);
+            assert(ntohll(receive.response.message.body.value) == (uint64_t)ii);
         }
     }
 
@@ -1446,23 +1452,23 @@ static enum test_return test_binary_decr_impl(const char* key, uint8_t cmd) {
         protocol_binary_response_no_extras response_header;
         protocol_binary_response_decr response;
         char bytes[1024];
-    } send, receive;
-    size_t len = arithmetic_command(send.bytes, sizeof(send.bytes), cmd,
+    } sendbuffer, receive;
+    size_t len = arithmetic_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                                     key, strlen(key), 1, 9, 0);
 
     int ii;
     for (ii = 9; ii >= 0; --ii) {
-        safe_send(send.bytes, len, false);
+        safe_send(sendbuffer.bytes, len, false);
         if (cmd == PROTOCOL_BINARY_CMD_DECREMENT) {
             safe_recv_packet(receive.bytes, sizeof(receive.bytes));
             validate_response_header(&receive.response_header, cmd,
                                      PROTOCOL_BINARY_RESPONSE_SUCCESS);
-            assert(ntohll(receive.response.message.body.value) == ii);
+            assert(ntohll(receive.response.message.body.value) == (uint64_t)ii);
         }
     }
 
     /* decr on 0 should not wrap */
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     if (cmd == PROTOCOL_BINARY_CMD_DECREMENT) {
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
         validate_response_header(&receive.response_header, cmd,
@@ -1509,59 +1515,59 @@ static enum test_return test_binary_flush_impl(const char *key, uint8_t cmd) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, receive;
+    } sendbuffer, receive;
 
-    size_t len = storage_command(send.bytes, sizeof(send.bytes),
+    size_t len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                                  PROTOCOL_BINARY_CMD_ADD,
                                  key, strlen(key), NULL, 0, 0, 0);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_ADD,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
-    len = flush_command(send.bytes, sizeof(send.bytes), cmd, 2, true);
-    safe_send(send.bytes, len, false);
+    len = flush_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd, 2, true);
+    safe_send(sendbuffer.bytes, len, false);
     if (cmd == PROTOCOL_BINARY_CMD_FLUSH) {
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
         validate_response_header(&receive.response, cmd,
                                  PROTOCOL_BINARY_RESPONSE_SUCCESS);
     }
 
-    len = raw_command(send.bytes, sizeof(send.bytes), PROTOCOL_BINARY_CMD_GET,
+    len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), PROTOCOL_BINARY_CMD_GET,
                       key, strlen(key), NULL, 0);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_GET,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
     sleep(2);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_GET,
                              PROTOCOL_BINARY_RESPONSE_KEY_ENOENT);
 
     int ii;
     for (ii = 0; ii < 2; ++ii) {
-        len = storage_command(send.bytes, sizeof(send.bytes),
+        len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                               PROTOCOL_BINARY_CMD_ADD,
                               key, strlen(key), NULL, 0, 0, 0);
-        safe_send(send.bytes, len, false);
+        safe_send(sendbuffer.bytes, len, false);
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
         validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_ADD,
                                  PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
-        len = flush_command(send.bytes, sizeof(send.bytes), cmd, 0, ii == 0);
-        safe_send(send.bytes, len, false);
+        len = flush_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd, 0, ii == 0);
+        safe_send(sendbuffer.bytes, len, false);
         if (cmd == PROTOCOL_BINARY_CMD_FLUSH) {
             safe_recv_packet(receive.bytes, sizeof(receive.bytes));
             validate_response_header(&receive.response, cmd,
                                      PROTOCOL_BINARY_RESPONSE_SUCCESS);
         }
 
-        len = raw_command(send.bytes, sizeof(send.bytes),
+        len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                           PROTOCOL_BINARY_CMD_GET,
                           key, strlen(key), NULL, 0);
-        safe_send(send.bytes, len, false);
+        safe_send(sendbuffer.bytes, len, false);
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
         validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_GET,
                                  PROTOCOL_BINARY_RESPONSE_KEY_ENOENT);
@@ -1585,39 +1591,39 @@ static enum test_return test_binary_cas(void) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, receive;
+    } sendbuffer, receive;
 
-    size_t len = flush_command(send.bytes, sizeof(send.bytes), PROTOCOL_BINARY_CMD_FLUSH,
+    size_t len = flush_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), PROTOCOL_BINARY_CMD_FLUSH,
                                0, false);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_FLUSH,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
     uint64_t value = 0xdeadbeefdeadcafe;
-    len = storage_command(send.bytes, sizeof(send.bytes), PROTOCOL_BINARY_CMD_SET,
+    len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), PROTOCOL_BINARY_CMD_SET,
                           "FOO", 3, &value, sizeof(value), 0, 0);
 
-    send.request.message.header.request.cas = 0x7ffffff;
-    safe_send(send.bytes, len, false);
+    sendbuffer.request.message.header.request.cas = 0x7ffffff;
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_SET,
                              PROTOCOL_BINARY_RESPONSE_KEY_ENOENT);
 
-    send.request.message.header.request.cas = 0x0;
-    safe_send(send.bytes, len, false);
+    sendbuffer.request.message.header.request.cas = 0x0;
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_SET,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
-    send.request.message.header.request.cas = receive.response.message.header.response.cas;
-    safe_send(send.bytes, len, false);
+    sendbuffer.request.message.header.request.cas = receive.response.message.header.response.cas;
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_SET,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
-    send.request.message.header.request.cas = receive.response.message.header.response.cas - 1;
-    safe_send(send.bytes, len, false);
+    sendbuffer.request.message.header.request.cas = receive.response.message.header.response.cas - 1;
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_SET,
                              PROTOCOL_BINARY_RESPONSE_KEY_EEXISTS);
@@ -1629,47 +1635,47 @@ static enum test_return test_binary_concat_impl(const char *key, uint8_t cmd) {
         protocol_binary_request_no_extras request;
         protocol_binary_response_no_extras response;
         char bytes[1024];
-    } send, receive;
+    } sendbuffer, receive;
     const char *value = "world";
 
-    size_t len = raw_command(send.bytes, sizeof(send.bytes), cmd,
+    size_t len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                               key, strlen(key), value, strlen(value));
 
 
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, cmd,
                              PROTOCOL_BINARY_RESPONSE_NOT_STORED);
 
-    len = storage_command(send.bytes, sizeof(send.bytes),
+    len = storage_command(sendbuffer.bytes, sizeof(sendbuffer.bytes),
                           PROTOCOL_BINARY_CMD_ADD,
                           key, strlen(key), value, strlen(value), 0, 0);
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_ADD,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
 
-    len = raw_command(send.bytes, sizeof(send.bytes), cmd,
+    len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), cmd,
                       key, strlen(key), value, strlen(value));
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
 
     if (cmd == PROTOCOL_BINARY_CMD_APPEND || cmd == PROTOCOL_BINARY_CMD_PREPEND) {
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
         validate_response_header(&receive.response, cmd,
                                  PROTOCOL_BINARY_RESPONSE_SUCCESS);
     } else {
-        len = raw_command(send.bytes, sizeof(send.bytes), PROTOCOL_BINARY_CMD_NOOP,
+        len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), PROTOCOL_BINARY_CMD_NOOP,
                           NULL, 0, NULL, 0);
-        safe_send(send.bytes, len, false);
+        safe_send(sendbuffer.bytes, len, false);
         safe_recv_packet(receive.bytes, sizeof(receive.bytes));
         validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_NOOP,
                                  PROTOCOL_BINARY_RESPONSE_SUCCESS);
     }
 
-    len = raw_command(send.bytes, sizeof(send.bytes), PROTOCOL_BINARY_CMD_GETK,
+    len = raw_command(sendbuffer.bytes, sizeof(sendbuffer.bytes), PROTOCOL_BINARY_CMD_GETK,
                       key, strlen(key), NULL, 0);
 
-    safe_send(send.bytes, len, false);
+    safe_send(sendbuffer.bytes, len, false);
     safe_recv_packet(receive.bytes, sizeof(receive.bytes));
     validate_response_header(&receive.response, PROTOCOL_BINARY_CMD_GETK,
                              PROTOCOL_BINARY_RESPONSE_SUCCESS);
@@ -1754,6 +1760,7 @@ static enum test_return test_binary_scrub(void) {
 volatile bool hickup_thread_running;
 
 static void *binary_hickup_recv_verification_thread(void *arg) {
+    (void)arg;
     protocol_binary_response_no_extras *response = malloc(65*1024);
     if (response != NULL) {
         while (safe_recv_packet(response, 65*1024)) {
@@ -2034,6 +2041,9 @@ struct testcase testcases[] = {
 
 int main(int argc, char **argv)
 {
+    (void)argc;
+    (void)argv;
+
     int exitcode = 0;
     int ii = 0, num_cases = 0;
 
